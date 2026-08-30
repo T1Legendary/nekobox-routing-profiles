@@ -9,7 +9,6 @@
   российские и белорусские назначения идут напрямую.
 - `profiles/all-through-vpn-except-ru.json` — российские IP и домены напрямую,
   остальной трафик через VPN.
-- `client-overlay/public/check_routeprofiles.js` — файл для папки `public`
   переносной сборки NekoBox.
 - `tools/validate.py` — локальная проверка каталога и профилей.
 
