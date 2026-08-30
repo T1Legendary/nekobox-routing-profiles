@@ -22,9 +22,16 @@
 - `https://raw.githubusercontent.com/T1Legendary/nekobox-routing-profiles/main/profiles/by-oleg.json`
 - `https://raw.githubusercontent.com/T1Legendary/nekobox-routing-profiles/main/profiles/all-through-vpn-except-ru.json`
 
-Затем скопируйте `client-overlay/public/check_routeprofiles.js` в папку
-`public` рядом с `nekobox.exe`. В готовом архиве настроек этот файл уже лежит
-в нужном месте.
+Ссылки в `catalog.json` намеренно остаются ссылками на GitHub: это канонические
+адреса источника. Файл `client-overlay/public/check_routeprofiles.js` передаёт
+их функции `get_jsdelivr_link()`, а клиент с `ruleset_mirror = 1` фактически
+загружает каталог и профили через jsDelivr. Это позволяет работать в сетях, где
+`raw.githubusercontent.com` недоступен.
+
+Скопируйте `client-overlay/public/check_routeprofiles.js` в папку `public`
+рядом с `nekobox.exe`. В готовом архиве настроек этот файл уже лежит в нужном
+месте. Саму папку `client-overlay` полезно хранить в репозитории как резервную
+копию клиентского файла; NekoBox не загружает этот JS из репозитория автоматически.
 
 ## Обновление существующего профиля
 
@@ -47,3 +54,10 @@
 
 Не загружайте сюда папку `settings`, VLESS-ссылки, UUID, ключи Reality или
 другие параметры серверов.
+
+## Ошибка `parse rule-set[0]: EOF`
+
+Она означает, что клиент пытается разобрать пустой или недокачанный `.srs`.
+Закройте NekoBox, удалите старую папку `settings` и установите полный архив
+настроек с зеркалом jsDelivr. Простая замена одного JSON не удаляет повреждённый
+кэш, поэтому для этого случая нужна чистая замена папки.
