@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "id": "by-oleg",
+      "name": "byOleg",
+      "url": "https://raw.githubusercontent.com/T1Legendary/nekobox-routing-profiles/main/profiles/by-oleg.json",
+      "default_outbound": "direct"
+    },
+    {
+      "id": "all-through-vpn-except-ru",
+      "name": "all through vpn except RU",
+      "url": "https://raw.githubusercontent.com/T1Legendary/nekobox-routing-profiles/main/profiles/all-through-vpn-except-ru.json",
+      "default_outbound": "proxy"
+    }
+  ]
+}

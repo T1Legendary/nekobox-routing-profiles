@@ -1,0 +1,14 @@
+[
+  {
+    "action": "hijack-dns",
+    "protocol": "dns"
+  },
+  {
+    "action": "route",
+    "outbound": "direct",
+    "rule_set": [
+      "geoip-ru",
+      "geosite-category-ru"
+    ]
+  }
+]

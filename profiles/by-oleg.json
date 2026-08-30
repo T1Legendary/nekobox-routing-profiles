@@ -1,0 +1,24 @@
+[
+  {
+    "action": "hijack-dns",
+    "protocol": "dns"
+  },
+  {
+    "action": "route",
+    "outbound": "direct",
+    "rule_set": [
+      "geoip-ru",
+      "geoip-by",
+      "geosite-category-ru"
+    ]
+  },
+  {
+    "action": "route",
+    "outbound": "proxy",
+    "process_name": [
+      "brave.exe",
+      "Discord.exe",
+      "Telegram.exe"
+    ]
+  }
+]
