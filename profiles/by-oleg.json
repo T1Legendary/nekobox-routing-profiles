@@ -18,7 +18,8 @@
     "process_name": [
       "brave.exe",
       "Discord.exe",
-      "Telegram.exe"
+      "Telegram.exe",
+      "browser.exe"
     ]
   }
 ]
