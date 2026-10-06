@@ -49,6 +49,8 @@ $originalCore = Join-Path $originalGui[0].Directory.FullName 'nekobox_core.exe'
 if ((Get-FileHash $originalCore).Hash -ne (Get-FileHash "$stage/nekobox_core.exe").Hash) { throw 'Core unexpectedly changed' }
 Copy-Item "$kit/README-RU.md" "$stage/WEPPi-Simple-Routing.md"
 Copy-Item "$kit/simple-routing.patch" "$stage/simple-routing.patch"
+Copy-Item "$kit/overlay/*" $stage -Recurse -Force
+"[General]`nprogram_version=$version" | Set-Content "$stage/global.ini" -Encoding utf8NoBOM
 Copy-Item "$src/LICENSE" "$stage/LICENSE-source.txt"
 # Keep all build sources beside the binary artifact for reproducibility.
 $sourceStage = Join-Path $root 'source-package'

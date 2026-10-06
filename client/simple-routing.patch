@@ -1,5 +1,5 @@
 diff --git a/src/gharqad/dataStore/RouteEntity.cpp b/src/gharqad/dataStore/RouteEntity.cpp
-index e4f73e3..91a8450 100755
+index e4f73e3..740e65a 100755
 --- a/src/gharqad/dataStore/RouteEntity.cpp
 +++ b/src/gharqad/dataStore/RouteEntity.cpp
 @@ -12,6 +12,7 @@
@@ -10,7 +10,7 @@ index e4f73e3..91a8450 100755
  #include <nekobox/dataStore/Database.hpp>
  #include <nekobox/configs/proxy/Preset.hpp>
  #include <iostream>
-@@ -654,6 +655,45 @@ namespace Configs {
+@@ -654,6 +655,48 @@ namespace Configs {
                  }
              }
              rule->name = "imported rule #" + QString::number(ruleID++);
@@ -52,6 +52,9 @@ index e4f73e3..91a8450 100755
 +                rule->simpleAction = metadata.action;
 +                rule->name = QString("Simple ") + ruleTypeToString(static_cast<ruleType>(rule->type))
 +                    + " -> " + simpleActionToString(static_cast<simpleAction>(rule->simpleAction));
++                // The editor requires unique names. Keep separate ordered rules
++                // recognizable instead of letting it rename duplicates to rule_N.
++                rule->name += " #" + QString::number(ruleID - 1);
 +            }
              rules << rule;
          }

@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: simple-routing-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   windows:
     runs-on: windows-2022
@@ -48,8 +48,26 @@ jobs:
           arch: win64_msvc2022_64
           modules: qt5compat
           cache: true
+      - name: Restore dependency cache
+        id: deps-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: vcpkg/installed
+          key: simple-routing-vcpkg-windows2022-cd61e1e26a-1
       - name: Build and package
         run: ./kit/client/build-windows.ps1
+      - name: Save dependency cache
+        if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: vcpkg/installed
+          key: simple-routing-vcpkg-windows2022-cd61e1e26a-1
+      - name: Upload build manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: simple-routing-build-manifest
+          path: dist/build-manifest.json
+          if-no-files-found: error
       - name: Upload Windows installer, portable package and source
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
