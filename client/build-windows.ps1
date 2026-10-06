@@ -63,21 +63,32 @@ Run tar @('-czf', "$dist/nekobox-$version-source.tar.gz", '-C', $sourceStage, '.
 $smoke = Join-Path $root 'smoke-test'
 Copy-Item $stage $smoke -Recurse
 New-Item -ItemType Directory "$smoke/settings" | Out-Null
-$env:QT_QPA_PLATFORM = 'offscreen'
+$qtPlugins = (& qmake -query QT_INSTALL_PLUGINS).Trim()
+if ($LASTEXITCODE -ne 0 -or !(Test-Path "$qtPlugins/platforms/qoffscreen.dll")) { throw 'Qt offscreen test plugin not found' }
+Copy-Item "$qtPlugins/platforms/qoffscreen.dll" "$smoke/platforms/qoffscreen.dll"
+$env:QT_QPA_PLATFORM = 'offscreen' 
 $proc = Start-Process "$smoke/nekobox.exe" -WorkingDirectory $smoke -PassThru -RedirectStandardOutput "$root/smoke-stdout.log" -RedirectStandardError "$root/smoke-stderr.log"
 try {
     if ($proc.WaitForExit(10000)) { throw "GUI exited during startup with code $($proc.ExitCode)" }
+    if (!(Test-Path "$smoke/settings/nekobox.cfg")) { throw 'GUI did not initialize its settings' }
+    $smokeError = Get-Content "$root/smoke-stderr.log" -Raw -ErrorAction SilentlyContinue
+    if ($smokeError -match 'could not (find|load).*platform plugin|no Qt platform plugin|could not be initialized') { throw 'Qt platform initialization failed' }
+    Write-Host 'GUI startup and settings initialization passed.' 
 } finally {
     if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force }
     Get-Process nekobox_core -ErrorAction SilentlyContinue | Stop-Process -Force
     Remove-Item Env:QT_QPA_PLATFORM
+    Get-Content "$root/smoke-stderr.log" -Tail 40 -ErrorAction SilentlyContinue
 }
 $nsis = Get-Command makensis.exe -ErrorAction SilentlyContinue
 if (!$nsis) {
     $nsisPath = "${env:ProgramFiles(x86)}/NSIS/makensis.exe"
     if (!(Test-Path $nsisPath)) { throw 'NSIS is required to package the installer' }
 } else { $nsisPath = $nsis.Source }
-Run $nsisPath @('/V2', "/DSOFTWARE_VERSION=$version", '/DSOFTWARE_NAME=NekoBox', "/DDIRECTORY=$stage", "/DOUTFILE=$dist/nekobox-$version-windows64-installer", "$src/script/windows_installer.nsi")
+Push-Location $src
+try {
+Run $nsisPath @('/NOCD', '/V2', "/DSOFTWARE_VERSION=$version", '/DSOFTWARE_NAME=NekoBox', "/DDIRECTORY=$stage", "/DOUTFILE=$dist/nekobox-$version-windows64-installer", "$src/script/windows_installer.nsi")
+} finally { Pop-Location }
 Compress-Archive -Path "$stage/*" -DestinationPath "$dist/nekobox-$version-windows64.zip" -CompressionLevel Optimal
 $manifest = [ordered]@{
     version = $version

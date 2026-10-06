@@ -60,10 +60,33 @@ index e4f73e3..740e65a 100755
          }
  
 diff --git a/src/gharqad/ui/mainwindow.cpp b/src/gharqad/ui/mainwindow.cpp
-index 58fb2bc..c09fd93 100755
+index 58fb2bc..f906367 100755
 --- a/src/gharqad/ui/mainwindow.cpp
 +++ b/src/gharqad/ui/mainwindow.cpp
-@@ -1878,16 +1878,24 @@ int MainWindow::updateRouteProfiles() {
+@@ -1527,10 +1527,12 @@ skip_updater_hide:
+         actionUpdateProfiles, &QAction::triggered, this,
+         [=, this]() {
+           CHECK_SETTINGS_ACCESS_W
++          actionUpdateProfiles->setEnabled(false);
+           runOnNewThread([=, this] {
+             int profiles_count = updateRouteProfiles();
+ 
+-            runOnUiThread([profiles_count, this] {
++            runOnUiThread([profiles_count, this, actionUpdateProfiles] {
++              actionUpdateProfiles->setEnabled(true);
+               if (profiles_count == 0) {
+ 
+                 QMessageBox::warning(this, tr("Update Response"),
+@@ -1544,7 +1546,7 @@ skip_updater_hide:
+             });
+           });
+         },
+-        Qt::SingleShotConnection);
++        Qt::AutoConnection);
+ 
+     auto *actionUpdateRuleSet = new QAction(updateMenu);
+     actionUpdateRuleSet->setText(
+@@ -1878,16 +1880,24 @@ int MainWindow::updateRouteProfiles() {
      }
      auto url = chain->update_url;
      if (!url.isEmpty()) {
