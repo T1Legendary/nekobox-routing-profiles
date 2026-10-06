@@ -70,10 +70,18 @@ $env:QT_QPA_PLATFORM = 'offscreen'
 $proc = Start-Process "$smoke/nekobox.exe" -WorkingDirectory $smoke -PassThru -RedirectStandardOutput "$root/smoke-stdout.log" -RedirectStandardError "$root/smoke-stderr.log"
 try {
     if ($proc.WaitForExit(10000)) { throw "GUI exited during startup with code $($proc.ExitCode)" }
-    if (!(Test-Path "$smoke/settings/nekobox.cfg")) { throw 'GUI did not initialize its settings' }
+    if (!(Test-Path "$smoke/settings/window.ini")) { throw 'GUI did not initialize its working directory' }
+    # Fresh upstream installations do not necessarily write nekobox.cfg. A second
+    # invocation must reach the first instance through its Thrift pipe and exit.
+    $second = Start-Process "$smoke/nekobox.exe" -WorkingDirectory $smoke -PassThru -RedirectStandardOutput "$root/smoke-second-stdout.log" -RedirectStandardError "$root/smoke-second-stderr.log"
+    try {
+        if (!$second.WaitForExit(10000)) { throw 'The running GUI did not accept a second-instance request' }
+        if ($second.ExitCode -ne 0) { throw "Second-instance check failed: $($second.ExitCode)" }
+        if ($proc.HasExited) { throw 'The main GUI exited during the second-instance check' }
+    } finally { if (!$second.HasExited) { Stop-Process -Id $second.Id -Force } }
     $smokeError = Get-Content "$root/smoke-stderr.log" -Raw -ErrorAction SilentlyContinue
     if ($smokeError -match 'could not (find|load).*platform plugin|no Qt platform plugin|could not be initialized') { throw 'Qt platform initialization failed' }
-    Write-Host 'GUI startup and settings initialization passed.' 
+    Write-Host 'GUI startup, working directory and single-instance RPC passed.' 
 } finally {
     if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force }
     Get-Process nekobox_core -ErrorAction SilentlyContinue | Stop-Process -Force
