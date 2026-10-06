@@ -1,0 +1,59 @@
+name: NekoBox Simple Routing Windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [weppi-client/simple-routing-v1]
+    paths: ['client/**', '.github/workflows/build-simple-routing.yml']
+permissions:
+  contents: read
+concurrency:
+  group: simple-routing-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout build kit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: kit
+          persist-credentials: false
+      - name: Checkout NekoBox 5.11.24
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: qr243vbi/nekobox
+          ref: 2dbdb5f6f61efe9830808c44876bfd82b6b5cc9a
+          path: upstream
+          submodules: recursive
+          persist-credentials: false
+      - name: Checkout pinned vcpkg
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: microsoft/vcpkg
+          ref: cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3 # 2026.06.24
+          path: vcpkg
+          persist-credentials: false
+      - name: MSVC x64
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1
+        with:
+          arch: x64
+      - name: Qt 6.10.0
+        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+        with:
+          version: '6.10.0'
+          arch: win64_msvc2022_64
+          modules: qt5compat
+          cache: true
+      - name: Build and package
+        run: ./kit/client/build-windows.ps1
+      - name: Upload Windows installer, portable package and source
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: nekobox-5.11.24-weppi-routing-1-windows64
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30

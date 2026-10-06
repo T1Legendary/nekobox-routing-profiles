@@ -1,0 +1,206 @@
+diff --git a/src/gharqad/dataStore/RouteEntity.cpp b/src/gharqad/dataStore/RouteEntity.cpp
+index e4f73e3..91a8450 100755
+--- a/src/gharqad/dataStore/RouteEntity.cpp
++++ b/src/gharqad/dataStore/RouteEntity.cpp
+@@ -12,6 +12,7 @@
+ #include <nekobox/configs/proxy/AbstractBean.hpp>
+ #include <nekobox/configs/proxy/ChainBean.hpp>
+ #include <nekobox/dataStore/RouteEntity.h>
++#include <nekobox/dataStore/SimpleRuleClassification.hpp>
+ #include <nekobox/dataStore/Database.hpp>
+ #include <nekobox/configs/proxy/Preset.hpp>
+ #include <iostream>
+@@ -654,6 +655,45 @@ namespace Configs {
+                 }
+             }
+             rule->name = "imported rule #" + QString::number(ruleID++);
++            std::vector<std::string> keys;
++            bool selectorsValid = true;
++            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
++                keys.push_back(it.key().toStdString());
++                if (SimpleRuleClassification::selectorKind(keys.back()) == SimpleRuleClassification::Custom) continue;
++                const auto value = it.value();
++                auto validText = [](const QJsonValue& text) {
++                    return text.isString() && !text.toString().trimmed().isEmpty()
++                        && !text.toString().contains('\n') && !text.toString().contains('\r');
++                };
++                if (value.isArray()) {
++                    const auto values = value.toArray();
++                    selectorsValid = selectorsValid && !values.isEmpty();
++                    for (const auto& text : values) selectorsValid = selectorsValid && validText(text);
++                } else {
++                    selectorsValid = selectorsValid && validText(value);
++                }
++            }
++            // An invalid outbound must not become a basic rule via the default ID.
++            if (obj.contains("outbound")) {
++                const auto value = obj.value("outbound");
++                selectorsValid = selectorsValid && (value.isString() || value.isObject() ||
++                    (value.isDouble() && value.toDouble() == value.toInt()));
++            }
++            if (obj.contains("action") && !obj.value("action").isString()) selectorsValid = false;
++            const auto metadata = SimpleRuleClassification::classify(keys, rule->action.toStdString(),
++                                                                     rule->outboundID, selectorsValid);
++            static_assert(simpleAddress == int(SimpleRuleClassification::Address));
++            static_assert(simpleProcessName == int(SimpleRuleClassification::ProcessName));
++            static_assert(simpleProcessPath == int(SimpleRuleClassification::ProcessPath));
++            static_assert(direct == int(SimpleRuleClassification::Direct));
++            static_assert(block == int(SimpleRuleClassification::Block));
++            static_assert(proxy == int(SimpleRuleClassification::Proxy));
++            if (metadata.kind != SimpleRuleClassification::Custom) {
++                rule->type = metadata.kind;
++                rule->simpleAction = metadata.action;
++                rule->name = QString("Simple ") + ruleTypeToString(static_cast<ruleType>(rule->type))
++                    + " -> " + simpleActionToString(static_cast<simpleAction>(rule->simpleAction));
++            }
+             rules << rule;
+         }
+ 
+diff --git a/src/gharqad/ui/mainwindow.cpp b/src/gharqad/ui/mainwindow.cpp
+index 58fb2bc..c09fd93 100755
+--- a/src/gharqad/ui/mainwindow.cpp
++++ b/src/gharqad/ui/mainwindow.cpp
+@@ -1878,16 +1878,24 @@ int MainWindow::updateRouteProfiles() {
+     }
+     auto url = chain->update_url;
+     if (!url.isEmpty()) {
+-      url = Configs::get_jsdelivr_link(url);
++      // Fetch GitHub profile URLs directly, without a CDN serving an older copy.
++      if (QUrl(url).host().compare("raw.githubusercontent.com", Qt::CaseInsensitive) != 0)
++        url = Configs::get_jsdelivr_link(url);
+       auto response = NetworkRequestHelper::HttpGet(url);
+       if (response.error.isEmpty()) {
+         QString err;
+         auto parsed = Configs::RoutingChain::parseJsonArray(
+             QString2QJsonArray(response.data), &err);
+         if (err.isEmpty()) {
+-          chain->Rules.clear();
+-          chain->Rules << parsed;
+-          profiles_count++;
++          const auto previousRules = chain->Rules;
++          chain->Rules = parsed;
++          if (chain->Save()) {
++            profiles_count++;
++          } else {
++            chain->Rules = previousRules;
++            chain->castedRules.clear();
++            MW_show_log(QObject::tr("Could not save updated route profile: %1").arg(chain->chain_name));
++          }
+         }
+       }
+     }
+diff --git a/src/gharqad/ui/setting/RouteItem.cpp b/src/gharqad/ui/setting/RouteItem.cpp
+index d4c7088..ab2b05e 100644
+--- a/src/gharqad/ui/setting/RouteItem.cpp
++++ b/src/gharqad/ui/setting/RouteItem.cpp
+@@ -500,6 +500,13 @@ void RouteItem::loadSimpleBoxes() {
+     blockIp->setPlainText(ip);
+     blockDomain->setPlainText(domain);
+     blockProcess->setPlainText(process);
++    loadedSimpleBoxes = simpleBoxContents();
++}
++
++QStringList RouteItem::simpleBoxContents() const {
++    return {directIp->toPlainText(), directDomain->toPlainText(), directProcess->toPlainText(),
++            blockIp->toPlainText(), blockDomain->toPlainText(), blockProcess->toPlainText(),
++            proxyIp->toPlainText(), proxyDomain->toPlainText(), proxyProcess->toPlainText()};
+ }
+ 
+ QString RouteItem::commitSimpleBoxes() {
+@@ -514,10 +521,17 @@ QString RouteItem::commitSimpleBoxes() {
+         return parts.join('\n');
+     };
+ 
++    const auto current = simpleBoxContents();
++    // Opening the basic tab or accepting an unchanged dialog must not regroup
++    // imported rules: their position among custom rules affects routing.
++    auto changed = [&](int offset) {
++        return current.mid(offset, 3) != loadedSimpleBoxes.mid(offset, 3);
++    };
+     QString res;
+-    res += chain->UpdateSimpleRules(joinBoxes(directIp, directDomain, directProcess), Configs::direct);
+-    res += chain->UpdateSimpleRules(joinBoxes(blockIp, blockDomain, blockProcess), Configs::block);
+-    res += chain->UpdateSimpleRules(joinBoxes(proxyIp, proxyDomain, proxyProcess), Configs::proxy);
++    if (changed(0)) res += chain->UpdateSimpleRules(joinBoxes(directIp, directDomain, directProcess), Configs::direct);
++    if (changed(3)) res += chain->UpdateSimpleRules(joinBoxes(blockIp, blockDomain, blockProcess), Configs::block);
++    if (changed(6)) res += chain->UpdateSimpleRules(joinBoxes(proxyIp, proxyDomain, proxyProcess), Configs::proxy);
++    if (res.isEmpty()) loadedSimpleBoxes = current;
+     return res;
+ }
+ 
+diff --git a/src/nekobox/dataStore/RouteEntity.h b/src/nekobox/dataStore/RouteEntity.h
+index 00862da..97ca43e 100755
+--- a/src/nekobox/dataStore/RouteEntity.h
++++ b/src/nekobox/dataStore/RouteEntity.h
+@@ -81,7 +81,7 @@ namespace Configs {
+         virtual ConfJsMap _map() override;
+         QString name = "";
+         int type = custom;
+-        int simpleAction;
++        int simpleAction = direct;
+         QString ip_version;
+         QString network;
+         QString protocol;
+diff --git a/src/nekobox/dataStore/SimpleRuleClassification.hpp b/src/nekobox/dataStore/SimpleRuleClassification.hpp
+new file mode 100644
+index 0000000..0b48548
+--- /dev/null
++++ b/src/nekobox/dataStore/SimpleRuleClassification.hpp
+@@ -0,0 +1,42 @@
++#pragma once
++
++#include <string>
++#include <string_view>
++#include <vector>
++
++// UI metadata only. Never split, merge or reorder the imported rules.
++namespace SimpleRuleClassification {
++enum Kind { Custom = 0, Address = 1, ProcessName = 2, ProcessPath = 3 };
++enum Action { Direct = 0, Block = 1, Proxy = 2 };
++struct Result { Kind kind = Custom; Action action = Direct; };
++
++inline Kind selectorKind(std::string_view key) {
++    if (key == "domain" || key == "domain_suffix" || key == "domain_keyword" ||
++        key == "domain_regex" || key == "ip_cidr" || key == "rule_set") return Address;
++    if (key == "process_name") return ProcessName;
++    if (key == "process_path") return ProcessPath;
++    return Custom;
++}
++
++inline Result classify(const std::vector<std::string>& keys, std::string_view action,
++                       int outbound, bool selectorsValid) {
++    if (!selectorsValid) return {};
++    Kind kind = Custom;
++    bool hasOutbound = false;
++    for (const auto& key : keys) {
++        if (key == "action") continue;
++        if (key == "outbound") { hasOutbound = true; continue; }
++        const auto next = selectorKind(key);
++        // Unknown fields and additional conditions stay in the advanced editor.
++        if (next == Custom || (kind != Custom && kind != next)) return {};
++        kind = next;
++    }
++    if (kind == Custom) return {};
++    if (action == "reject" && !hasOutbound) return {kind, Block};
++    if (action != "route" || !hasOutbound) return {};
++    if (outbound == -2) return {kind, Direct};
++    if (outbound == -1) return {kind, Proxy};
++    if (outbound == -3) return {kind, Block};
++    return {};
++}
++}
+diff --git a/src/nekobox/ui/setting/RouteItem.h b/src/nekobox/ui/setting/RouteItem.h
+index 06e2649..941af23 100644
+--- a/src/nekobox/ui/setting/RouteItem.h
++++ b/src/nekobox/ui/setting/RouteItem.h
+@@ -73,6 +73,10 @@ private:
+ 
+     bool route_item_on_notes = false;
+ 
++    QStringList loadedSimpleBoxes;
++
++    QStringList simpleBoxContents() const;
++
+     [[nodiscard]] int getIndexOf(const QString& name) const;
+ 
+     void showSelectItem(const QStringList& items, const QString& currentItem);
